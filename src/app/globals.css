@@ -1,0 +1,250 @@
+@import "tailwindcss";
+
+/*
+  BuildRent visual language
+  ------------------------------------------------------------------
+  Palette borrows from the shop floor: concrete greys, a deep pine
+  green for anything the admin acts on, and a site-amber reserved
+  strictly for attention (low stock, overdue, unpaid). Nothing else
+  gets to be amber, so amber always means "look here".
+
+  Type: IBM Plex Sans for the interface, IBM Plex Mono for every
+  number that sits in a column — quantities, rates, rupees, ids.
+*/
+
+@theme {
+  --color-canvas: #f3f3f0;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fafaf8;
+  --color-line: #e2e1db;
+  --color-line-strong: #cfcec6;
+  --color-ink: #17191b;
+  --color-ink-soft: #4b5058;
+  --color-ink-muted: #767b84;
+
+  --color-brand: #124c46;
+  --color-brand-hover: #0d3b36;
+  --color-brand-soft: #e3efec;
+  --color-brand-ink: #0b3b36;
+
+  --color-amber: #b45f06;
+  --color-amber-soft: #fdf1dc;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdeceb;
+  --color-info: #1f5f8b;
+  --color-info-soft: #e8f1f8;
+  --color-success: #1a7f52;
+  --color-success-soft: #e6f4ed;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --radius-card: 10px;
+}
+
+.dark {
+  --color-canvas: #101215;
+  --color-surface: #191c21;
+  --color-surface-muted: #1f2329;
+  --color-line: #2b3037;
+  --color-line-strong: #3a414a;
+  --color-ink: #e9eae7;
+  --color-ink-soft: #b3b8bf;
+  --color-ink-muted: #878d96;
+
+  --color-brand: #3fa394;
+  --color-brand-hover: #57b7a8;
+  --color-brand-soft: #17302d;
+  --color-brand-ink: #a5ded4;
+
+  --color-amber: #e0a352;
+  --color-amber-soft: #332510;
+  --color-danger: #f07167;
+  --color-danger-soft: #3a1b19;
+  --color-info: #7fb4d8;
+  --color-info-soft: #17262f;
+  --color-success: #58c295;
+  --color-success-soft: #102a20;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv05" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Numbers in tables should line up; letters should not pretend to be numbers. */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Sheet / dialog entrance — motion that answers an action, nothing else. */
+@keyframes br-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes br-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes br-slide-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes br-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes br-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-fade {
+  animation: br-fade 0.16s ease-out;
+}
+.animate-pop {
+  animation: br-pop 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.animate-slide-left {
+  animation: br-slide-left 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.animate-slide-up {
+  animation: br-slide-up 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-muted);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.04), transparent);
+  animation: br-shimmer 1.4s infinite;
+}
+.dark .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.05), transparent);
+}
+
+/* ── Print: only the invoice survives ─────────────────────────── */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .no-print,
+  nav,
+  header button,
+  aside {
+    display: none !important;
+  }
+
+  .print-area {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+  }
+
+  .print-area * {
+    color: #000 !important;
+    background: transparent !important;
+  }
+
+  .print-area table {
+    border-collapse: collapse;
+  }
+
+  .print-area th,
+  .print-area td {
+    border-color: #999 !important;
+  }
+}
