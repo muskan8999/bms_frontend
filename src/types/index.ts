@@ -83,6 +83,7 @@ export type DeleteMaterialApiResponse = {
   deletedMaterial: DeletedMaterial;
 };
 export type RentalStatus =| "ACTIVE" | "COMPLETED" | "CANCELLED" | "PENDING";
+export type RentalDisplayStatus = "active"| "returned" | "cancelled" | "overdue" | "draft";
 
 export type Rental = {
   id: string;
@@ -106,6 +107,21 @@ export type RentalCreateApiResponse = {
   message: string;
   rental: Rental;
 };
+
+export type RentalsData = {
+  rentals: Rental[];
+  totalRentals: number;
+  totalPages: number;
+  currentPage: number;
+};
+
+export type RentalsApiResponse = {
+  success: boolean;
+  message: string;
+  rentalData: RentalsData;
+};
+
+
 
 /** Audit trail so the shop can see when a daily rate was changed and by whom. */
 export type RateChange = {

@@ -4,58 +4,118 @@ import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Plus, Search } from "lucide-react";
-import { useAppStore } from "@/store/app-store";
+
 import { usePageMeta, PageIntro } from "@/components/layout/app-shell";
-import { effectiveStatus } from "@/lib/calculations";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { RentalTable } from "@/components/rentals/rental-table";
+import { callApi } from "@/service/ApiService";
+
+import type {
+  Rental,
+  RentalsApiResponse,
+  RentalStatus,
+} from "@/types";
 
 const tabs = ["all", "active", "overdue", "returned", "draft"] as const;
+
 type Tab = (typeof tabs)[number];
 
 function RentalsPageContent() {
   usePageMeta("Rentals", [{ label: "Rentals" }]);
+
   const searchParams = useSearchParams();
-  const { state, ready, customerById } = useAppStore();
 
-  const initialTab = (searchParams.get("tab") as Tab) ?? "all";
-  const [tab, setTab] = React.useState<Tab>(tabs.includes(initialTab) ? initialTab : "all");
+  const initialTab = searchParams.get("tab") as Tab | null;
+
+  const [tab, setTab] = React.useState<Tab>(
+    initialTab && tabs.includes(initialTab) ? initialTab : "all",
+  );
+
   const [query, setQuery] = React.useState("");
+  const [debouncedQuery, setDebouncedQuery] = React.useState("");
 
-  const withStatus = React.useMemo(
-    () => state.rentals.map((rental) => ({ rental, status: effectiveStatus(rental) })),
-    [state.rentals],
-  );
+  const [rentals, setRentals] = React.useState<Rental[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const counts = React.useMemo(
-    () => ({
-      all: withStatus.filter((entry) => entry.status !== "cancelled").length,
-      active: withStatus.filter((entry) => entry.status === "active").length,
-      overdue: withStatus.filter((entry) => entry.status === "overdue").length,
-      returned: withStatus.filter((entry) => entry.status === "returned").length,
-      draft: withStatus.filter((entry) => entry.status === "draft").length,
-    }),
-    [withStatus],
-  );
+  const [page, setPage] = React.useState(1);
+  const [totalPages, setTotalPages] = React.useState(1);
+  const [totalRentals, setTotalRentals] = React.useState(0);
 
-  const rentals = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return withStatus
-      .filter((entry) => (tab === "all" ? entry.status !== "cancelled" : entry.status === tab))
-      .filter((entry) => {
-        if (!q) return true;
-        const customer = customerById(entry.rental.customerId);
-        const materials = entry.rental.items.map((item) => item.materialName).join(" ");
-        return `${entry.rental.id} ${customer?.name ?? ""} ${customer?.phone ?? ""} ${materials}`
-          .toLowerCase()
-          .includes(q);
-      })
-      .map((entry) => entry.rental);
-  }, [withStatus, tab, query, customerById]);
+  const pageSize = 10;
+
+  /*
+   * Debounce search
+   */
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+      setPage(1);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  /*
+   * Fetch rentals
+   */
+  const fetchRentals = React.useCallback(async () => {
+    try {
+      setLoading(true);
+
+      let status: RentalStatus | "" = "";
+
+      if (tab === "active") {
+        status = "ACTIVE";
+      } else if (tab === "returned") {
+        status = "COMPLETED";
+      }
+
+      const response = (await callApi({
+        method: "GET",
+        url: "/rentals/all",
+        params: {
+          page,
+          limit: pageSize,
+          search: debouncedQuery,
+          status,
+        },
+      })) as RentalsApiResponse;
+
+      if (response.success) {
+        setRentals(response.rentalData?.rentals ?? []);
+        setTotalPages(response.rentalData?.totalPages ?? 1);
+        setTotalRentals(response.rentalData?.totalRentals ?? 0);
+      } else {
+        setRentals([]);
+        setTotalPages(1);
+        setTotalRentals(0);
+      }
+    } catch (error) {
+      console.error("Failed to fetch rentals:", error);
+
+      setRentals([]);
+      setTotalPages(1);
+      setTotalRentals(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, debouncedQuery, tab]);
+
+  React.useEffect(() => {
+    fetchRentals();
+  }, [fetchRentals]);
+
+  /*
+   * Reset pagination when changing tab
+   */
+  const handleTabChange = (value: string) => {
+    setTab(value as Tab);
+    setPage(1);
+  };
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -75,13 +135,29 @@ function RentalsPageContent() {
         <div className="px-3 pt-2">
           <Tabs
             value={tab}
-            onChange={(value) => setTab(value as Tab)}
+            onChange={handleTabChange}
             items={[
-              { value: "all", label: "All", count: counts.all },
-              { value: "active", label: "Active", count: counts.active },
-              { value: "overdue", label: "Overdue", count: counts.overdue },
-              { value: "returned", label: "Returned", count: counts.returned },
-              { value: "draft", label: "Draft", count: counts.draft },
+              {
+                value: "all",
+                label: "All",
+                count: totalRentals,
+              },
+              {
+                value: "active",
+                label: "Active",
+              },
+              {
+                value: "overdue",
+                label: "Overdue",
+              },
+              {
+                value: "returned",
+                label: "Returned",
+              },
+              {
+                value: "draft",
+                label: "Draft",
+              },
             ]}
           />
         </div>
@@ -89,6 +165,7 @@ function RentalsPageContent() {
         <div className="p-3">
           <div className="relative max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
+
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -99,36 +176,69 @@ function RentalsPageContent() {
         </div>
 
         <div className="border-t border-line">
-          {!ready ? (
+          {loading ? (
             <TableSkeleton rows={7} columns={7} />
           ) : (
-            <RentalTable
-              rentals={rentals}
-              pageSize={10}
-              emptyTitle={
-                query
-                  ? "Nothing matches that search"
-                  : tab === "overdue"
-                    ? "Nothing is overdue"
-                    : tab === "draft"
-                      ? "No drafts saved"
-                      : "No rentals in this list"
-              }
-              emptyMessage={
-                query
-                  ? "Try the rental id, the customer's mobile number, or a material name."
-                  : tab === "overdue"
-                    ? "A rental turns overdue only when it has an expected return date that has passed."
-                    : "Create a rental to see it here."
-              }
-              emptyAction={
-                !query ? (
-                  <Link href="/rentals/new">
-                    <Button variant="primary">New rental</Button>
-                  </Link>
-                ) : undefined
-              }
-            />
+            <>
+              <RentalTable
+                rentals={rentals}
+                emptyTitle={
+                  debouncedQuery
+                    ? "Nothing matches that search"
+                    : tab === "overdue"
+                      ? "Nothing is overdue"
+                      : tab === "draft"
+                        ? "No drafts saved"
+                        : "No rentals in this list"
+                }
+                emptyMessage={
+                  debouncedQuery
+                    ? "Try the rental id, the customer's mobile number, or a material name."
+                    : tab === "overdue"
+                      ? "A rental turns overdue only when it has an expected return date that has passed."
+                      : "Create a rental to see it here."
+                }
+                emptyAction={
+                  !debouncedQuery ? (
+                    <Link href="/rentals/new">
+                      <Button variant="primary">
+                        New rental
+                      </Button>
+                    </Link>
+                  ) : undefined
+                }
+              />
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-line px-4 py-3">
+                  <p className="text-sm text-ink-muted">
+                    Page {page} of {totalPages}
+                  </p>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      disabled={page === 1}
+                      onClick={() =>
+                        setPage((prev) => prev - 1)
+                      }
+                    >
+                      Previous
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      disabled={page === totalPages}
+                      onClick={() =>
+                        setPage((prev) => prev + 1)
+                      }
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </Card>
@@ -136,13 +246,13 @@ function RentalsPageContent() {
   );
 }
 
-/**
- * useSearchParams needs a suspense boundary so the route can still be
- * statically shelled by Next.
- */
 export default function RentalsPage() {
   return (
-    <React.Suspense fallback={<div className="skeleton h-72 rounded-card" />}>
+    <React.Suspense
+      fallback={
+        <div className="skeleton h-72 rounded-card" />
+      }
+    >
       <RentalsPageContent />
     </React.Suspense>
   );

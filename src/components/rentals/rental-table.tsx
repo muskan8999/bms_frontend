@@ -9,89 +9,83 @@ import {
   FileText,
   PackageCheck,
   Pencil,
-  PlayCircle,
   XCircle,
 } from "lucide-react";
-import type { Rental } from "@/types";
-import { useAppStore, useDayOptions } from "@/store/app-store";
-import {
-  calculateRentalDailyRent,
-  calculateRemainingQuantity,
-  effectiveStatus,
-  rentalDurationSoFar,
-} from "@/lib/calculations";
+
+import type { Rental, RentalDisplayStatus } from "@/types";
 import { formatCurrency, formatDate, formatDays } from "@/lib/formatters";
-import { Pagination, TableShell, Td, Th, Tr } from "@/components/ui/table";
+import { TableShell, Td, Th, Tr } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowMenu, type MenuAction } from "@/components/ui/menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 
-type SortKey = "id" | "customer" | "issueDate" | "days" | "dailyRent";
+
+function getRentalStatus(rental: Rental): RentalDisplayStatus  {
+  if (rental.status === "CANCELLED") {
+    return "cancelled";
+  }
+
+  if (rental.status === "COMPLETED") {
+    return "returned";
+  }
+
+  if (
+    rental.status === "ACTIVE" &&
+    rental.endDate &&
+    new Date(rental.endDate).getTime() < Date.now()
+  ) {
+    return "overdue";
+  }
+
+  return "active";
+}
+
+function getRentalDays(rental: Rental) {
+  const startDate = new Date(rental.startDate);
+
+  if (Number.isNaN(startDate.getTime())) {
+    return 0;
+  }
+
+  const endDate = rental.endDate
+    ? new Date(rental.endDate)
+    : new Date();
+
+  if (Number.isNaN(endDate.getTime())) {
+    return 0;
+  }
+
+  const difference =
+    endDate.getTime() - startDate.getTime();
+
+  return Math.max(
+    1,
+    Math.ceil(
+      difference / (1000 * 60 * 60 * 24)
+    )
+  );
+}
+
+function getDailyRent(rental: Rental) {
+  return Number(rental.dailyRentalRate) || 0;
+}
 
 export function RentalTable({
   rentals,
   emptyTitle = "No rentals here yet",
   emptyMessage = "Rentals you create will show up in this list.",
   emptyAction,
-  pageSize = 8,
 }: {
   rentals: Rental[];
   emptyTitle?: string;
   emptyMessage?: string;
   emptyAction?: React.ReactNode;
-  pageSize?: number;
 }) {
   const router = useRouter();
-  const { customerById, invoiceForRental, cancelRental, issueDraft } = useAppStore();
-  const dayOptions = useDayOptions();
-  const [sort, setSort] = React.useState<{ key: SortKey; dir: "asc" | "desc" }>({
-    key: "issueDate",
-    dir: "desc",
-  });
-  const [page, setPage] = React.useState(1);
-  const [cancelling, setCancelling] = React.useState<Rental | null>(null);
 
-  React.useEffect(() => setPage(1), [rentals.length]);
-
-  const sorted = React.useMemo(() => {
-    const copy = [...rentals];
-    copy.sort((a, b) => {
-      const direction = sort.dir === "asc" ? 1 : -1;
-      switch (sort.key) {
-        case "customer":
-          return (
-            (customerById(a.customerId)?.name ?? "").localeCompare(
-              customerById(b.customerId)?.name ?? "",
-            ) * direction
-          );
-        case "days":
-          return (rentalDurationSoFar(a, dayOptions) - rentalDurationSoFar(b, dayOptions)) * direction;
-        case "dailyRent":
-          return (
-            (calculateRentalDailyRent(a.items) - calculateRentalDailyRent(b.items)) * direction
-          );
-        case "issueDate":
-          return a.issueDate.localeCompare(b.issueDate) * direction;
-        default:
-          return a.id.localeCompare(b.id) * direction;
-      }
-    });
-    return copy;
-  }, [rentals, sort, customerById, dayOptions]);
-
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const rows = sorted.slice((page - 1) * pageSize, page * pageSize);
-
-  const toggleSort = (key: SortKey) =>
-    setSort((current) =>
-      current.key === key
-        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
-        : { key, dir: "asc" },
-    );
-
-  const sortState = (key: SortKey) => (sort.key === key ? sort.dir : false);
+  const [cancelling, setCancelling] =
+    React.useState<Rental | null>(null);
 
   if (rentals.length === 0) {
     return (
@@ -109,145 +103,184 @@ export function RentalTable({
       <TableShell>
         <thead>
           <tr>
-            <Th sortable sorted={sortState("id")} onSort={() => toggleSort("id")}>
-              Rental
-            </Th>
-            <Th sortable sorted={sortState("customer")} onSort={() => toggleSort("customer")}>
-              Customer
-            </Th>
+            <Th>Rental</Th>
+
+            <Th>Customer</Th>
+
             <Th>Materials</Th>
-            <Th sortable sorted={sortState("issueDate")} onSort={() => toggleSort("issueDate")}>
-              Issued
-            </Th>
-            <Th align="right" sortable sorted={sortState("days")} onSort={() => toggleSort("days")}>
-              Days
-            </Th>
-            <Th
-              align="right"
-              sortable
-              sorted={sortState("dailyRent")}
-              onSort={() => toggleSort("dailyRent")}
-            >
-              Daily rent
-            </Th>
+
+            <Th>Issued</Th>
+
+            <Th align="right">Days</Th>
+
+            <Th align="right">Daily rent</Th>
+
             <Th>Status</Th>
+
             <Th align="right">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">
+                Actions
+              </span>
             </Th>
           </tr>
         </thead>
+
         <tbody>
-          {rows.map((rental) => {
-            const customer = customerById(rental.customerId);
-            const status = effectiveStatus(rental);
-            const invoice = invoiceForRental(rental.id);
-            const remaining = rental.items.reduce(
-              (sum, item) => sum + calculateRemainingQuantity(item),
-              0,
-            );
-            const closed = status === "returned" || status === "cancelled";
+          {rentals.map((rental) => {
+            const customer = rental.customer;
+
+            const status = getRentalStatus(rental);
+
+            const days = getRentalDays(rental);
+
+            const dailyRent = getDailyRent(rental);
+
+            const closed =
+              status === "returned" ||
+              status === "cancelled";
 
             const actions: MenuAction[] = [
               {
                 label: "View details",
                 icon: Eye,
-                onSelect: () => router.push(`/rentals/${rental.id}`),
+                onSelect: () =>
+                  router.push(
+                    `/rentals/${rental.id}`
+                  ),
               },
             ];
-
-            if (rental.status === "draft") {
-              actions.push({
-                label: "Issue this rental",
-                icon: PlayCircle,
-                onSelect: () => issueDraft(rental.id),
-              });
-            }
 
             if (!closed) {
               actions.push(
                 {
                   label: "Edit rental",
                   icon: Pencil,
-                  onSelect: () => router.push(`/rentals/${rental.id}?edit=1`),
+                  onSelect: () =>
+                    router.push(
+                      `/rentals/${rental.id}?edit=1`
+                    ),
                 },
                 {
                   label: "Record a return",
                   icon: PackageCheck,
-                  onSelect: () => router.push(`/rentals/${rental.id}/return`),
-                  disabled: rental.status === "draft",
+                  onSelect: () =>
+                    router.push(
+                      `/rentals/${rental.id}/return`
+                    ),
                 },
                 {
                   label: "Cancel rental",
                   icon: XCircle,
                   tone: "danger",
                   separatorBefore: true,
-                  onSelect: () => setCancelling(rental),
-                },
+                  onSelect: () =>
+                    setCancelling(rental),
+                }
               );
-            } else if (invoice) {
+            } else if (
+              rental.status === "COMPLETED"
+            ) {
               actions.push({
                 label: "Open bill",
                 icon: FileText,
-                onSelect: () => router.push(`/bills?invoice=${invoice.id}`),
+                onSelect: () =>
+                  router.push(
+                    `/bills?rental=${rental.id}`
+                  ),
               });
             }
 
             return (
               <Tr
-                key={rental.id}
+                key={String(rental.id)}
                 clickable
-                onClick={() => router.push(`/rentals/${rental.id}`)}
+                onClick={() =>
+                  router.push(
+                    `/rentals/${rental.id}`
+                  )
+                }
               >
+                {/* Rental ID */}
                 <Td>
-                  <span className="tabular text-[13px] font-medium text-ink">{rental.id}</span>
+                  <span className="tabular text-[13px] font-medium text-ink">
+                    {rental.id}
+                  </span>
                 </Td>
+
+                {/* Customer */}
                 <Td>
                   {customer ? (
                     <Link
                       href={`/customers/${customer.id}`}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(event) =>
+                        event.stopPropagation()
+                      }
                       className="font-medium text-ink hover:text-brand"
                     >
                       {customer.name}
                     </Link>
                   ) : (
-                    <span className="text-ink-muted">Deleted customer</span>
+                    <span className="text-ink-muted">
+                      Deleted customer
+                    </span>
                   )}
+
                   <span className="tabular block text-[12px] text-ink-muted">
-                    {customer?.phone}
+                    {customer?.phone ?? ""}
                   </span>
                 </Td>
+
+                {/* Material */}
                 <Td>
                   <span className="block max-w-[16rem] truncate text-[13px]">
-                    {rental.items
-                      .map((item) => `${item.quantity} × ${item.materialName}`)
-                      .join(", ")}
+                    {rental.quantity} ×{" "}
+                    {rental.material?.name ??
+                      "Unknown material"}
                   </span>
-                  {remaining > 0 && status !== "draft" ? (
+
+                  {rental.quantity > 0 &&
+                  status !== "cancelled" ? (
                     <span className="tabular block text-[12px] text-ink-muted">
-                      {remaining} still out
+                      {rental.quantity} out
                     </span>
                   ) : null}
                 </Td>
+
+                {/* Issue Date */}
                 <Td>
-                  <span className="tabular text-[13px]">{formatDate(rental.issueDate)}</span>
+                  <span className="tabular text-[13px]">
+                    {formatDate(
+                      rental.startDate
+                    )}
+                  </span>
                 </Td>
+
+                {/* Days */}
                 <Td align="right">
                   <span className="tabular text-[13px]">
-                    {rental.status === "draft"
-                      ? "—"
-                      : formatDays(rentalDurationSoFar(rental, dayOptions))}
+                    {formatDays(days)}
                   </span>
                 </Td>
+
+                {/* Daily Rent */}
                 <Td align="right">
                   <span className="tabular text-[13px] font-medium text-ink">
-                    {formatCurrency(calculateRentalDailyRent(rental.items))}
+                    {formatCurrency(dailyRent)}
                   </span>
                 </Td>
+
+                {/* Status */}
                 <Td>
                   <StatusBadge status={status} />
                 </Td>
-                <Td align="right" onClick={(event) => event.stopPropagation()}>
+
+                {/* Actions */}
+                <Td
+                  align="right"
+                  onClick={(event) =>
+                    event.stopPropagation()
+                  }
+                >
                   <RowMenu actions={actions} />
                 </Td>
               </Tr>
@@ -256,23 +289,24 @@ export function RentalTable({
         </tbody>
       </TableShell>
 
-      <Pagination
-        page={page}
-        pageCount={pageCount}
-        total={sorted.length}
-        onPageChange={setPage}
-        label="rentals"
-      />
-
       <ConfirmDialog
         open={Boolean(cancelling)}
-        onClose={() => setCancelling(null)}
-        onConfirm={() => cancelling && cancelRental(cancelling.id)}
-        title={`Cancel ${cancelling?.id ?? "rental"}?`}
+        onClose={() =>
+          setCancelling(null)
+        }
+        onConfirm={() => {
+          // Cancel API will be connected here.
+          setCancelling(null);
+        }}
+        title={`Cancel ${
+          cancelling?.id ?? "rental"
+        }?`}
         message={
           <>
-            The rental will be marked cancelled and every item on it goes back into available
-            stock. No bill is raised. This cannot be undone.
+            The rental will be marked cancelled and
+            every item on it goes back into available
+            stock. No bill is raised. This cannot be
+            undone.
           </>
         }
         confirmLabel="Cancel rental"
@@ -285,17 +319,8 @@ export function RentalTable({
 export function RentalTableFooterHint() {
   return (
     <p className="px-4 pb-4 text-[12px] text-ink-muted">
-      Day counts for active rentals update on their own. The bill is only raised when the material
-      comes back.
+      Day counts for active rentals update on their own.
+      The bill is only raised when the material comes back.
     </p>
-  );
-}
-
-export function NewRentalButton() {
-  const router = useRouter();
-  return (
-    <Button variant="primary" onClick={() => router.push("/rentals/new")}>
-      New rental
-    </Button>
   );
 }

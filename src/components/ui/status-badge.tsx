@@ -1,8 +1,8 @@
-import type { PaymentStatus, RentalStatus } from "@/types";
+import type { PaymentStatus, RentalDisplayStatus, RentalStatus } from "@/types";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const rentalTone: Record<RentalStatus, { tone: BadgeTone; label: string; dot: string }> = {
+const rentalTone: Record<RentalDisplayStatus, { tone: BadgeTone; label: string; dot: string }> = {
   active: { tone: "brand", label: "Active", dot: "bg-brand" },
   returned: { tone: "success", label: "Returned", dot: "bg-success" },
   overdue: { tone: "danger", label: "Overdue", dot: "bg-danger" },
@@ -16,7 +16,7 @@ const paymentTone: Record<PaymentStatus, { tone: BadgeTone; label: string; dot: 
   partial: { tone: "info", label: "Part paid", dot: "bg-info" },
 };
 
-export function StatusBadge({ status }: { status: RentalStatus }) {
+export function StatusBadge({ status }: { status: RentalDisplayStatus }) {
   const config = rentalTone[status];
   return (
     <Badge tone={config.tone}>
