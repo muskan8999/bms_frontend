@@ -251,22 +251,20 @@ export default function NewRentalPage() {
        * Therefore, we create one rental request for every selected item.
        */
 
-      await Promise.all(
-        items.map((item) =>
-          callApi<RentalCreateApiResponse>({
-            method: "POST",
-            url: "/rentals/create",
-            data: {
-              customerId,
-              materialId: item.materialId,
-              quantity: item.quantity,
-              startDate,
-              endDate: endDate || undefined,
-              notes: notes || undefined,
-            },
-          }),
-        ),
-      );
+      await callApi<RentalCreateApiResponse>({
+        method: "POST",
+        url: "/rentals/create",
+        data: {
+          customerId,
+          startDate,
+          endDate: endDate || undefined,
+          notes: notes || undefined,
+          items: items.map((item) => ({
+            materialId: item.materialId,
+            quantity: item.quantity,
+          })),
+        },
+      });
 
       toast({
         title: "Rental created",

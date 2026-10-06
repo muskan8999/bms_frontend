@@ -13,15 +13,18 @@ import {
 } from "lucide-react";
 
 import type { Rental, RentalDisplayStatus } from "@/types";
+
 import { formatCurrency, formatDate, formatDays } from "@/lib/formatters";
+
 import { TableShell, Td, Th, Tr } from "@/components/ui/table";
+
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowMenu, type MenuAction } from "@/components/ui/menu";
+
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/dialog";
 
-
-function getRentalStatus(rental: Rental): RentalDisplayStatus  {
+function getRentalStatus(rental: Rental): RentalDisplayStatus {
   if (rental.status === "CANCELLED") {
     return "cancelled";
   }
@@ -48,27 +51,26 @@ function getRentalDays(rental: Rental) {
     return 0;
   }
 
-  const endDate = rental.endDate
-    ? new Date(rental.endDate)
-    : new Date();
+  const endDate = rental.endDate ? new Date(rental.endDate) : new Date();
 
   if (Number.isNaN(endDate.getTime())) {
     return 0;
   }
 
-  const difference =
-    endDate.getTime() - startDate.getTime();
+  const difference = endDate.getTime() - startDate.getTime();
 
-  return Math.max(
-    1,
-    Math.ceil(
-      difference / (1000 * 60 * 60 * 24)
-    )
-  );
+  return Math.max(1, Math.ceil(difference / (1000 * 60 * 60 * 24)));
 }
 
 function getDailyRent(rental: Rental) {
-  return Number(rental.dailyRentalRate) || 0;
+  return rental.items.reduce(
+    (total, item) => total + Number(item.dailyRentalRate) * item.quantity,
+    0,
+  );
+}
+
+function getTotalQuantity(rental: Rental) {
+  return rental.items.reduce((total, item) => total + item.quantity, 0);
 }
 
 export function RentalTable({
@@ -84,8 +86,7 @@ export function RentalTable({
 }) {
   const router = useRouter();
 
-  const [cancelling, setCancelling] =
-    React.useState<Rental | null>(null);
+  const [cancelling, setCancelling] = React.useState<Rental | null>(null);
 
   if (rentals.length === 0) {
     return (
@@ -118,9 +119,7 @@ export function RentalTable({
             <Th>Status</Th>
 
             <Th align="right">
-              <span className="sr-only">
-                Actions
-              </span>
+              <span className="sr-only">Actions</span>
             </Th>
           </tr>
         </thead>
@@ -135,18 +134,15 @@ export function RentalTable({
 
             const dailyRent = getDailyRent(rental);
 
-            const closed =
-              status === "returned" ||
-              status === "cancelled";
+            const totalQuantity = getTotalQuantity(rental);
+
+            const closed = status === "returned" || status === "cancelled";
 
             const actions: MenuAction[] = [
               {
                 label: "View details",
                 icon: Eye,
-                onSelect: () =>
-                  router.push(
-                    `/rentals/${rental.id}`
-                  ),
+                onSelect: () => router.push(`/rentals/${rental.id}`),
               },
             ];
 
@@ -155,38 +151,29 @@ export function RentalTable({
                 {
                   label: "Edit rental",
                   icon: Pencil,
-                  onSelect: () =>
-                    router.push(
-                      `/rentals/${rental.id}?edit=1`
-                    ),
+                  onSelect: () => router.push(`/rentals/${rental.id}?edit=1`),
                 },
+
                 {
                   label: "Record a return",
                   icon: PackageCheck,
-                  onSelect: () =>
-                    router.push(
-                      `/rentals/${rental.id}/return`
-                    ),
+                  onSelect: () => router.push(`/rentals/${rental.id}/return`),
                 },
+
                 {
                   label: "Cancel rental",
                   icon: XCircle,
                   tone: "danger",
                   separatorBefore: true,
-                  onSelect: () =>
-                    setCancelling(rental),
-                }
+                  onSelect: () => setCancelling(rental),
+                },
               );
-            } else if (
-              rental.status === "COMPLETED"
-            ) {
+            } else if (rental.status === "COMPLETED") {
               actions.push({
                 label: "Open bill",
                 icon: FileText,
-                onSelect: () =>
-                  router.push(
-                    `/bills?rental=${rental.id}`
-                  ),
+
+                onSelect: () => router.push(`/bills?rental=${rental.id}`),
               });
             }
 
@@ -194,13 +181,10 @@ export function RentalTable({
               <Tr
                 key={String(rental.id)}
                 clickable
-                onClick={() =>
-                  router.push(
-                    `/rentals/${rental.id}`
-                  )
-                }
+                onClick={() => router.push(`/rentals/${rental.id}`)}
               >
                 {/* Rental ID */}
+
                 <Td>
                   <span className="tabular text-[13px] font-medium text-ink">
                     {rental.id}
@@ -208,21 +192,18 @@ export function RentalTable({
                 </Td>
 
                 {/* Customer */}
+
                 <Td>
                   {customer ? (
                     <Link
                       href={`/customers/${customer.id}`}
-                      onClick={(event) =>
-                        event.stopPropagation()
-                      }
+                      onClick={(event) => event.stopPropagation()}
                       className="font-medium text-ink hover:text-brand"
                     >
                       {customer.name}
                     </Link>
                   ) : (
-                    <span className="text-ink-muted">
-                      Deleted customer
-                    </span>
+                    <span className="text-ink-muted">Deleted customer</span>
                   )}
 
                   <span className="tabular block text-[12px] text-ink-muted">
@@ -230,32 +211,40 @@ export function RentalTable({
                   </span>
                 </Td>
 
-                {/* Material */}
-                <Td>
-                  <span className="block max-w-[16rem] truncate text-[13px]">
-                    {rental.quantity} ×{" "}
-                    {rental.material?.name ??
-                      "Unknown material"}
-                  </span>
+                {/* Materials */}
 
-                  {rental.quantity > 0 &&
-                  status !== "cancelled" ? (
+                <Td>
+                  <div className="max-w-[16rem]">
+                    {rental.items.map((item, index) => (
+                      <span
+                        key={item.id}
+                        className="block truncate text-[13px]"
+                      >
+                        {item.quantity} ×{" "}
+                        {item.material?.name ?? "Unknown material"}
+                        {index < rental.items.length - 1 ? "," : ""}
+                      </span>
+                    ))}
+                  </div>
+
+                  {totalQuantity > 0 && status !== "cancelled" ? (
                     <span className="tabular block text-[12px] text-ink-muted">
-                      {rental.quantity} out
+                      {totalQuantity} {totalQuantity === 1 ? "item" : "items"}{" "}
+                      out
                     </span>
                   ) : null}
                 </Td>
 
                 {/* Issue Date */}
+
                 <Td>
                   <span className="tabular text-[13px]">
-                    {formatDate(
-                      rental.startDate
-                    )}
+                    {formatDate(rental.startDate)}
                   </span>
                 </Td>
 
                 {/* Days */}
+
                 <Td align="right">
                   <span className="tabular text-[13px]">
                     {formatDays(days)}
@@ -263,6 +252,7 @@ export function RentalTable({
                 </Td>
 
                 {/* Daily Rent */}
+
                 <Td align="right">
                   <span className="tabular text-[13px] font-medium text-ink">
                     {formatCurrency(dailyRent)}
@@ -270,17 +260,14 @@ export function RentalTable({
                 </Td>
 
                 {/* Status */}
+
                 <Td>
                   <StatusBadge status={status} />
                 </Td>
 
                 {/* Actions */}
-                <Td
-                  align="right"
-                  onClick={(event) =>
-                    event.stopPropagation()
-                  }
-                >
+
+                <Td align="right" onClick={(event) => event.stopPropagation()}>
                   <RowMenu actions={actions} />
                 </Td>
               </Tr>
@@ -291,22 +278,17 @@ export function RentalTable({
 
       <ConfirmDialog
         open={Boolean(cancelling)}
-        onClose={() =>
-          setCancelling(null)
-        }
+        onClose={() => setCancelling(null)}
         onConfirm={() => {
           // Cancel API will be connected here.
+
           setCancelling(null);
         }}
-        title={`Cancel ${
-          cancelling?.id ?? "rental"
-        }?`}
+        title={`Cancel ${cancelling?.id ?? "rental"}?`}
         message={
           <>
-            The rental will be marked cancelled and
-            every item on it goes back into available
-            stock. No bill is raised. This cannot be
-            undone.
+            The rental will be marked cancelled and every item on it goes back
+            into available stock. No bill is raised. This cannot be undone.
           </>
         }
         confirmLabel="Cancel rental"
@@ -319,8 +301,8 @@ export function RentalTable({
 export function RentalTableFooterHint() {
   return (
     <p className="px-4 pb-4 text-[12px] text-ink-muted">
-      Day counts for active rentals update on their own.
-      The bill is only raised when the material comes back.
+      Day counts for active rentals update on their own. The bill is only raised
+      when the material comes back.
     </p>
   );
 }

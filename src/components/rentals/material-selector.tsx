@@ -16,10 +16,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 export type DraftItem = { materialId: string; quantity: number };
 
-/**
- * Search a material, see its live stock and rate, set a quantity, press Enter.
- * The rate is never typed by hand — it comes from the material record.
- */
 export function MaterialSelector({
   items,
   onAdd,

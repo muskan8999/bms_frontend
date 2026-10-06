@@ -85,6 +85,15 @@ export type DeleteMaterialApiResponse = {
 export type RentalStatus =| "ACTIVE" | "COMPLETED" | "CANCELLED" | "PENDING";
 export type RentalDisplayStatus = "active"| "returned" | "cancelled" | "overdue" | "draft";
 
+export type RentalItem = {
+  id: string;
+  rentalId: string;
+  materialId: string;
+  quantity: number;
+  dailyRentalRate: number | string;
+  material: Material;
+};
+
 export type Rental = {
   id: string;
   customerId: string;
@@ -99,7 +108,7 @@ export type Rental = {
   createdAt: string;
   updatedAt: string;
   customer: Customer;
-  material: Material;
+ items: RentalItem[];
 };
 
 export type RentalCreateApiResponse = {
@@ -121,6 +130,13 @@ export type RentalsApiResponse = {
   rentalData: RentalsData;
 };
 
+// Get one rental by ID
+export type GetRentalApiResponse = {
+  success: boolean;
+  message: string;
+  rental: Rental;
+}
+
 
 
 /** Audit trail so the shop can see when a daily rate was changed and by whom. */
@@ -133,16 +149,6 @@ export type RateChange = {
   changedBy: string;
 };
 
-export type RentalItem = {
-  id: string;
-  materialId: string;
-  materialName: string;
-  quantity: number;
-  returnedQuantity: number;
-  /** Snapshot of the material's daily rate at the moment the rental was created. */
-  dailyRate: number;
-  unit: Unit;
-};
 
 
 export type ReturnRecord = {
